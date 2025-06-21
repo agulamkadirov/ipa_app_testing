@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:hello_flutter/models/client.dart';
+import 'client_form.dart';
 
 class ClientTile extends StatefulWidget {
   final Client client;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final ValueNotifier< List<Client> > clientsNotifier;
 
   const ClientTile({
     required this.client,
-    required this.onEdit,
-    required this.onDelete,
+    required this.clientsNotifier,
     super.key,
   });
 
@@ -18,7 +17,52 @@ class ClientTile extends StatefulWidget {
 }
 
 class _ClientTileState extends State<ClientTile> {
-  bool _expanded = false;
+    bool _expanded = false;
+
+    void _editClient(BuildContext context) {
+        final clients = widget.clientsNotifier.value;
+        final client = widget.client;
+        final index = clients.indexOf(client);
+
+        showDialog(
+          context: context,
+          builder: (_) => ClientForm(
+            initialClient: client,
+            onSave: (newClient) {
+                clients[index] = newClient;
+                clients.sort(Client.compareByDate);
+                widget.clientsNotifier.value = [...clients];
+            }
+          ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context) {
+      final clients = widget.clientsNotifier.value;
+      final client = widget.client;
+      final index = clients.indexOf(client);
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+            title: const Text("Buyurtmani o'chirmoqchimisiz?"),
+            actions: [
+                TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text("Yo'q"),
+                ),
+                ElevatedButton(
+                    onPressed: () {
+                        clients.removeAt(index);
+                        widget.clientsNotifier.value = [...clients];
+                        Navigator.of(context).pop();
+                    },
+                    child: const Text("Ha")
+                )
+            ]
+        )
+      );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,12 +106,12 @@ class _ClientTileState extends State<ClientTile> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton.icon(
-                    onPressed: widget.onEdit,
+                    onPressed: () => _editClient(context),
                     icon: const Icon(Icons.edit),
                     label: const Text(''),
                   ),
                   TextButton.icon(
-                    onPressed: widget.onDelete,
+                    onPressed: () => _confirmDelete(context),
                     icon: const Icon(Icons.delete),
                     label: const Text(""),
                   ),

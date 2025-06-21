@@ -1,88 +1,89 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../models/client.dart';
+import '../widgets/client_tile.dart';
 
 class CalendarView extends StatefulWidget {
-  final List<Client> clients;
+  final ValueNotifier<List<Client>> clientsNotifier;
 
-  const CalendarView({required this.clients, super.key});
+  const CalendarView({
+    required this.clientsNotifier,
+    super.key,
+  });
 
   @override
   State<CalendarView> createState() => _CalendarViewState();
 }
 
 class _CalendarViewState extends State<CalendarView> {
-  late Map<DateTime, List<Client>> _events;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
 
-  @override
-  void initState() {
-    super.initState();
-    _events = _groupClientsByDate(widget.clients);
-  }
+  /// Strips time portion from DateTime.
+  DateTime _normalizeDate(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
 
+  /// Groups clients by normalized date.
   Map<DateTime, List<Client>> _groupClientsByDate(List<Client> clients) {
-    Map<DateTime, List<Client>> map = {};
+    final Map<DateTime, List<Client>> map = {};
     for (var client in clients) {
-      final date = DateTime(client.date.year, client.date.month, client.date.day);
+      final date = _normalizeDate(client.date);
       map.putIfAbsent(date, () => []).add(client);
     }
     return map;
   }
 
-  List<Client> _getClientsForDay(DateTime day) {
-    final d = DateTime(day.year, day.month, day.day);
-    return _events[d] ?? [];
-  }
-
   @override
   Widget build(BuildContext context) {
-    final clientsForDay = _getClientsForDay(_selectedDay ?? _focusedDay);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Buyurtma Kalendar'),
       ),
-      body: Column(
-        children: [
-          TableCalendar<Client>(
-            firstDay: DateTime.now().subtract(const Duration(days: 365)),
-            lastDay: DateTime.now().add(const Duration(days: 365)),
-            focusedDay: _focusedDay,
-            selectedDayPredicate: (day) =>
-                _selectedDay != null &&
-                day.year == _selectedDay!.year &&
-                day.month == _selectedDay!.month &&
-                day.day == _selectedDay!.day,
-            eventLoader: _getClientsForDay,
-            onDaySelected: (selectedDay, focusedDay) {
-              setState(() {
-                _selectedDay = selectedDay;
-                _focusedDay = focusedDay;
-              });
-            },
-            calendarStyle: const CalendarStyle(
-              markerDecoration: BoxDecoration(
-                color: Colors.green,
-                shape: BoxShape.circle,
+      body: ValueListenableBuilder<List<Client>>(
+        valueListenable: widget.clientsNotifier,
+        builder: (context, clients, _) {
+          final events = _groupClientsByDate(clients);
+          final selectedDate = _normalizeDate(_selectedDay ?? _focusedDay);
+          final clientsForDay = events[selectedDate] ?? [];
+
+          return Column(
+            children: [
+              TableCalendar<Client>(
+                firstDay: DateTime.now().subtract(const Duration(days: 365)),
+                lastDay: DateTime.now().add(const Duration(days: 365)),
+                focusedDay: _focusedDay,
+                selectedDayPredicate: (day) =>
+                    _normalizeDate(day) == selectedDate,
+                eventLoader: (day) => events[_normalizeDate(day)] ?? [],
+                onDaySelected: (selectedDay, focusedDay) {
+                  setState(() {
+                    _selectedDay = _normalizeDate(selectedDay);
+                    _focusedDay = _normalizeDate(focusedDay);
+                  });
+                },
+                calendarStyle: const CalendarStyle(
+                  markerDecoration: BoxDecoration(
+                    color: Colors.green,
+                    shape: BoxShape.circle,
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: ListView.builder(
-              itemCount: clientsForDay.length,
-              itemBuilder: (context, index) {
-                final c = clientsForDay[index];
-                return ListTile(
-                  title: Text(c.name),
-                  subtitle: Text("${c.phone} • ${c.address}"),
-                );
-              },
-            ),
-          ),
-        ],
+              const SizedBox(height: 8),
+              Expanded(
+                child: clientsForDay.isEmpty
+                    ? const Center(child: Text('Buyurtma yo‘q'))
+                    : ListView.builder(
+                        itemCount: clientsForDay.length,
+                        itemBuilder: (context, index) {
+                          return ClientTile(
+                            client: clientsForDay[index],
+                            clientsNotifier: widget.clientsNotifier,
+                          );
+                        },
+                      ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

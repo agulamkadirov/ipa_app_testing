@@ -4,6 +4,7 @@ class Client {
     DateTime date;
     String notes;
     String address;
+    bool completed = false;
 
     Client({
         required this.name,

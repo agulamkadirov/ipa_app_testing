@@ -4,6 +4,7 @@ import 'models/client.dart';
 import 'widgets/client_tile.dart';
 import 'screens/calendar_view.dart';
 
+
 void main() {
     runApp(const MyApp());
 }
@@ -31,7 +32,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-    final List<Client> clients = [
+    ValueNotifier< List<Client> > clientsNotifier = ValueNotifier<List<Client>>([
     Client(
       name: 'Alice Smith',
       phone: '+123456789',
@@ -53,50 +54,26 @@ class _HomePageState extends State<HomePage> {
       notes: 'VIP client, send reminder 1 day before.',
       address: "Qo'shtepa street",
     ),
-  ];
+  ]);
 
-  void _showClientForm({Client? client, int? index}) {
-    showDialog(
-      context: context,
-      builder: (_) => ClientForm(
-        initialClient: client,
-        onSave: (newClient) {
-          setState(() {
-            if (index != null) {
-              clients[index] = newClient;
-            } else {
-              clients.add(newClient);
+    @override
+    void dispose() {
+        clientsNotifier.dispose();
+        super.dispose();
+    }
+    void _showClientForm() {
+        showDialog(
+          context: context,
+          builder: (_) => ClientForm(
+            onSave: (newClient) {
+                List<Client> clients = clientsNotifier.value;
+                clients.add(newClient);
+                clients.sort(Client.compareByDate);
+                clientsNotifier.value = [...clients];
             }
-          });
-
-          clients.sort(Client.compareByDate);
-        },
-      ),
+          ),
     );
   }
-
-  void _confirmDelete(int index) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-            title: const Text("Buyurtmani o'chirmoqchimisiz?"),
-            actions: [
-                TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text("Yo'q"),
-                ),
-                ElevatedButton(
-                    onPressed: () {
-                        setState( () => clients.removeAt(index) );
-                        Navigator.of(context).pop();
-                    },
-                    child: const Text("Ha")
-                )
-            ]
-        )
-      );
-  }
-
 
     @override
     Widget build(BuildContext context) {
@@ -110,7 +87,7 @@ class _HomePageState extends State<HomePage> {
                             Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                    builder: (_) => CalendarView(clients: clients),
+                                    builder: (_) => CalendarView(clientsNotifier: clientsNotifier),
                                 ),
                             );
                         },
@@ -126,17 +103,20 @@ class _HomePageState extends State<HomePage> {
                     bottom: 80, // FloatingPoint yopib qo'ymasligi uchun
                     // hardcode qilganim uchun kechiringlar :'(
                 ),
-                child: ListView.builder(
-                    itemCount: clients.length,
-                    itemBuilder: (context, index) {
-                        final client = clients[index];
-                        return ClientTile(
-                            client: client,
-                            onEdit: () => _showClientForm(client: client, index: index),
-                            onDelete: () => _confirmDelete(index),
+                child: ValueListenableBuilder<List<Client>>(
+                    valueListenable: clientsNotifier,
+                    builder: (context, clients, _) {
+                        return ListView.builder(
+                            itemCount: clients.length,
+                            itemBuilder: (context, index) {
+                                return ClientTile(
+                                    client: clients[index],
+                                    clientsNotifier: clientsNotifier,
+                                );
+                            },
                         );
-                    },
-                ),
+                    }
+                )
             ),
 
             floatingActionButton: FloatingActionButton(
