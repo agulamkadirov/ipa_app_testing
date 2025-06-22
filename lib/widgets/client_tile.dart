@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:hello_flutter/models/client.dart';
+import '../database/app_database.dart';
+import '../database/database_instance.dart';
+import 'package:drift/drift.dart' as drift;
 import 'client_form.dart';
 
 class ClientTile extends StatefulWidget {
@@ -28,14 +30,16 @@ class _ClientTileState extends State<ClientTile> {
           context: context,
           builder: (_) => ClientForm(
             initialClient: client,
-            onSave: (newClient) {
+            onSave: (newClient) async {
+                await db.update(db.clients).replace(newClient);
                 clients[index] = newClient;
-                clients.sort(Client.compareByDate);
+                clients.sort((a, b) => a.date.compareTo(b.date));
                 widget.clientsNotifier.value = [...clients];
+                Navigator.of(context).pop();
             }
           ),
-    );
-  }
+        );
+    }
 
   void _confirmDelete(BuildContext context) {
       final clients = widget.clientsNotifier.value;
@@ -52,7 +56,8 @@ class _ClientTileState extends State<ClientTile> {
                     child: const Text("Yo'q"),
                 ),
                 ElevatedButton(
-                    onPressed: () {
+                    onPressed: () async {
+                        await (db.delete(db.clients)..where((tbl) => tbl.id.equals(widget.client.id))).go();
                         clients.removeAt(index);
                         widget.clientsNotifier.value = [...clients];
                         Navigator.of(context).pop();
@@ -64,11 +69,65 @@ class _ClientTileState extends State<ClientTile> {
       );
   }
 
+  String _getDaysLeftText(DateTime date) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final target = DateTime(date.year, date.month, date.day);
+      final diff = target.difference(today).inDays;
+
+      if (diff == 0) return 'Bugun';
+      if (diff == 1) return 'Ertaga';
+      if (diff == 2) return 'Indinga';
+      if (diff < 0) return '${-diff} kun oldin';
+      return '$diff kun qoldi';
+  }
+
+  void _confirmCompletion(BuildContext context) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+            title: const Text("Tasdiqlaysizmi?"),
+            content: const Text("Bu buyurtmani yakunlandi deb belgilamoqchimisiz?"),
+            actions: [
+                TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text("Yo'q"),
+                    ),
+                ElevatedButton(
+                    onPressed: () async {
+                        // Update DB
+                        await (db.update(db.clients)
+                            ..where((tbl) => tbl.id.equals(widget.client.id)))
+                            .write(const ClientsCompanion(completed: drift.Value(true)));
+
+                        // Remove from UI
+                        final clients = widget.clientsNotifier.value;
+                        clients.remove(widget.client);
+                        widget.clientsNotifier.value = [...clients];
+
+                        Navigator.of(context).pop(); // Close the dialog
+                    },
+                    child: const Text("Ha"),
+                ),
+            ],
+        ),
+    );
+}
+
   @override
   Widget build(BuildContext context) {
-    final daysLeft = widget.client.date.difference(DateTime.now()).inDays;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final clientDate = DateTime(widget.client.date.year, widget.client.date.month, widget.client.date.day);
+    final isExpired = clientDate.isBefore(today) || clientDate.isAtSameMomentAs(today);
+    final textColor = isExpired ? Color(int.parse("0xFF37371F")) : Theme.of(context).textTheme.bodyMedium?.color;
+    final backgroundColor = isExpired
+        ? Color(int.parse("0xFFEA9010"))
+        : Theme.of(context).cardColor;
+    final textStyle = Theme.of(context).textTheme.titleMedium?.copyWith(color: textColor);
 
     return Card(
+      color: backgroundColor,
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       child: InkWell(
         onTap: () => setState(() => _expanded = !_expanded),
@@ -84,21 +143,33 @@ class _ClientTileState extends State<ClientTile> {
                   Expanded(
                     child: Text(
                       widget.client.name,
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(color: textColor),
                     ),
                   ),
-                  Text('$daysLeft kun qoldi'),
+                  Text(_getDaysLeftText(widget.client.date), style: textStyle),
                 ],
               ),
               const SizedBox(height: 4),
-              Text('📞 ${widget.client.phone}'),
-              Text('📅 ${widget.client.date.toLocal().toString().split(" ")[0]}'),
-              Text("📍 ${widget.client.address}"),
+              Text('📞 ${widget.client.phone}', style: textStyle),
+              Text('📅 ${widget.client.date.toLocal().toString().split(" ")[0]}', style: textStyle),
+              Text("📍 ${widget.client.address}", style: textStyle),
+
+              if (isExpired) ...[
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade700,
+                    ),
+                    onPressed: () => _confirmCompletion(context),
+                    icon: const Icon(Icons.check),
+                    label: const Text("Tugatildi"),
+                    ),
+              ],
 
               // Expandable Notes
               if (_expanded) ...[
                 const Divider(height: 16),
-                Text('📝 ${widget.client.notes}'),
+                Text('📝 ${widget.client.notes}', style: textStyle),
               ],
 
               // Buttons
@@ -107,12 +178,12 @@ class _ClientTileState extends State<ClientTile> {
                 children: [
                   TextButton.icon(
                     onPressed: () => _editClient(context),
-                    icon: const Icon(Icons.edit),
+                    icon: Icon(Icons.edit, color: isExpired ? Colors.black : Colors.white),
                     label: const Text(''),
                   ),
                   TextButton.icon(
                     onPressed: () => _confirmDelete(context),
-                    icon: const Icon(Icons.delete),
+                    icon: Icon(Icons.delete, color: isExpired ? Colors.black : Colors.white),
                     label: const Text(""),
                   ),
                 ],

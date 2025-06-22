@@ -1,4 +1,5 @@
 class Client {
+    int? id;
     String name;
     String phone;
     DateTime date;
@@ -7,6 +8,7 @@ class Client {
     bool completed = false;
 
     Client({
+        this.id,
         required this.name,
         required this.phone,
         required this.date,

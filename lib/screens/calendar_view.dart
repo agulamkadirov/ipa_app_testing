@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
-import '../models/client.dart';
+import '../database/app_database.dart';
 import '../widgets/client_tile.dart';
 
 class CalendarView extends StatefulWidget {

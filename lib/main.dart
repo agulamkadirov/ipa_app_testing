@@ -1,128 +1,127 @@
 import 'package:flutter/material.dart';
-import 'package:hello_flutter/widgets/client_form.dart';
-import 'models/client.dart';
-import 'widgets/client_tile.dart';
+import 'package:drift/drift.dart' as drift;
+import 'database/app_database.dart';
+import 'database/database_instance.dart';
 import 'screens/calendar_view.dart';
-
+import 'widgets/client_form.dart';
+import 'widgets/client_tile.dart';
 
 void main() {
-    runApp(const MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-    const MyApp({super.key});
+  const MyApp({super.key});
 
-    @override
-    Widget build(BuildContext context) {
-        return MaterialApp(
-            title: 'Dasturvachcha',
-            theme: ThemeData.light(),
-            darkTheme: ThemeData.dark(),
-            themeMode: ThemeMode.system,
-            home: const HomePage(),
-        );
-    }
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Dasturvachcha',
+      theme: ThemeData.dark(),
+      themeMode: ThemeMode.dark,
+      home: const HomePage(),
+    );
+  }
 }
 
 class HomePage extends StatefulWidget {
-    const HomePage({super.key});
+  const HomePage({super.key});
 
-    @override
-    State<HomePage> createState() => _HomePageState();
+  @override
+  State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-    ValueNotifier< List<Client> > clientsNotifier = ValueNotifier<List<Client>>([
-    Client(
-      name: 'Alice Smith',
-      phone: '+123456789',
-      date: DateTime.now().add(const Duration(days: 5)),
-      notes: 'Prefers morning appointments.',
-      address: "Shayxontoxur 15",
-    ),
-    Client(
-      name: 'Bob Johnson',
-      phone: '+987654321',
-      date: DateTime.now().add(const Duration(days: 12)),
-      notes: 'Brings dog, needs extra time.',
-      address: "Amerikada krch",
-    ),
-    Client(
-      name: 'Charlie Rose',
-      phone: '+1122334455',
-      date: DateTime.now().add(const Duration(days: 2)),
-      notes: 'VIP client, send reminder 1 day before.',
-      address: "Qo'shtepa street",
-    ),
-  ]);
+  final ValueNotifier<List<Client>> clientsNotifier = ValueNotifier([]);
 
-    @override
-    void dispose() {
-        clientsNotifier.dispose();
-        super.dispose();
-    }
-    void _showClientForm() {
-        showDialog(
-          context: context,
-          builder: (_) => ClientForm(
-            onSave: (newClient) {
-                List<Client> clients = clientsNotifier.value;
-                clients.add(newClient);
-                clients.sort(Client.compareByDate);
-                clientsNotifier.value = [...clients];
-            }
-          ),
+  @override
+  void initState() {
+    super.initState();
+    _loadClients();
+  }
+
+  Future<void> _loadClients() async {
+    final clientsFromDb = await (db.select(db.clients)
+        ..where((tbl) => tbl.completed.equals(false)))
+        .get();
+    clientsFromDb.sort((a, b) => a.date.compareTo(b.date));
+    clientsNotifier.value = clientsFromDb;
+  }
+
+  Future<void> _addClient(Client newClient) async {
+    await db.into(db.clients).insert(ClientsCompanion(
+      name: drift.Value(newClient.name),
+      phone: drift.Value(newClient.phone),
+      address: drift.Value(newClient.address),
+      notes: drift.Value(newClient.notes),
+      date: drift.Value(newClient.date),
+      completed: const drift.Value(false),
+    ));
+    await _loadClients();
+  }
+
+  void _showClientForm() {
+    showDialog(
+      context: context,
+      builder: (_) => ClientForm(
+        onSave: (newClient) async {
+          await _addClient(newClient);
+          Navigator.of(context).pop();
+        },
+      ),
     );
   }
 
-    @override
-    Widget build(BuildContext context) {
-        return Scaffold(
-            appBar: AppBar(
-                title: const Text('Rejalashtirgich'),
-                actions: [
-                    IconButton(
-                        icon: const Icon(Icons.calendar_month),
-                        onPressed: () {
-                            Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (_) => CalendarView(clientsNotifier: clientsNotifier),
-                                ),
-                            );
-                        },
-                    ),
-                    IconButton(
-                        icon: const Icon(Icons.brightness_6),
-                        onPressed: () {}, // TODO theme toggle logic here
-                    ),
-                ],
-            ),
-            body: Padding(
-                padding: const EdgeInsets.only(
-                    bottom: 80, // FloatingPoint yopib qo'ymasligi uchun
-                    // hardcode qilganim uchun kechiringlar :'(
-                ),
-                child: ValueListenableBuilder<List<Client>>(
-                    valueListenable: clientsNotifier,
-                    builder: (context, clients, _) {
-                        return ListView.builder(
-                            itemCount: clients.length,
-                            itemBuilder: (context, index) {
-                                return ClientTile(
-                                    client: clients[index],
-                                    clientsNotifier: clientsNotifier,
-                                );
-                            },
-                        );
-                    }
-                )
-            ),
+  @override
+  void dispose() {
+    clientsNotifier.dispose();
+    super.dispose();
+  }
 
-            floatingActionButton: FloatingActionButton(
-                onPressed: () => _showClientForm(),
-                child: const Icon(Icons.add),
-            ),
-        );
-    }
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Rejalashtirgich'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.calendar_month),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CalendarView(clientsNotifier: clientsNotifier),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.only(bottom: 80),
+        child: ValueListenableBuilder<List<Client>>(
+          valueListenable: clientsNotifier,
+          builder: (context, clients, _) {
+            if (clients.isEmpty) {
+              return const Center(child: Text("Buyurtmalar yo‘q"));
+            }
+            return ListView.builder(
+              itemCount: clients.length,
+              itemBuilder: (context, index) {
+                return ClientTile(
+                  client: clients[index],
+                  clientsNotifier: clientsNotifier,
+                );
+              },
+            );
+          },
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showClientForm,
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
 }
+
